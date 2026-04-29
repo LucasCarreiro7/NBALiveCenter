@@ -1,0 +1,6 @@
+{
+  "name": "NBA Live Tracker",
+  "description": "A comprehensive NBA dashboard featuring real-time scores, historical game results, and team statistics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["Real-time scores", "Historical data"]
+}
