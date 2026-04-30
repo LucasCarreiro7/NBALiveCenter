@@ -373,6 +373,7 @@ const TeamRosterModal = ({ teamId, onClose }: { teamId: number, onClose: () => v
   const [roster, setRoster] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [teamInfo, setTeamInfo] = useState<any>(null);
+  const [teamDetails, setTeamDetails] = useState<any>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -381,20 +382,21 @@ const TeamRosterModal = ({ teamId, onClose }: { teamId: number, onClose: () => v
       .then(data => {
         const rosterRS = data.resultSets.find((rs: any) => rs.name === 'CommonTeamRoster');
         const infoRS = data.resultSets.find((rs: any) => rs.name === 'TeamInfoCommon');
-        
+
         if (rosterRS) {
           const headers = rosterRS.headers;
           const players = rosterRS.rowSet.map((row: any) => {
             const h = (key: string) => row[headers.indexOf(key)];
             return {
               id: h('PLAYER_ID'),
-              num: h('NUMBER'),
+              // NUM e NUM_NR são os campos possíveis dependendo da versão da API
+              num: h('NUM') ?? h('NUM_NR') ?? h('NUMBER') ?? '',
               name: h('PLAYER'),
               pos: h('POSITION'),
               height: h('HEIGHT'),
               weight: h('WEIGHT'),
               exp: h('EXP'),
-              school: h('SCHOOL')
+              school: h('SCHOOL'),
             };
           });
           setRoster(players);
@@ -407,9 +409,16 @@ const TeamRosterModal = ({ teamId, onClose }: { teamId: number, onClose: () => v
           setTeamInfo({
             city: h('TEAM_CITY'),
             name: h('TEAM_NAME'),
-            id: h('TEAM_ID')
+            id: h('TEAM_ID'),
+            conference: h('TEAM_CONFERENCE'),
+            division: h('TEAM_DIVISION'),
           });
         }
+
+        if (data.teamDetails) {
+          setTeamDetails(data.teamDetails);
+        }
+
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -417,37 +426,41 @@ const TeamRosterModal = ({ teamId, onClose }: { teamId: number, onClose: () => v
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         onClick={onClose}
         className="absolute inset-0 bg-black/90 backdrop-blur-3xl"
       />
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, scale: 0.9, y: 50 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.9, y: 50 }}
         className="relative z-10 w-full max-w-6xl bg-[#08080a] border border-white/10 rounded-[3.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
       >
-        <div className="flex items-center justify-between px-10 py-10 border-b border-white/10 bg-white/2">
+        {/* Header */}
+        <div className="flex items-center justify-between px-10 py-8 border-b border-white/10 bg-white/2">
           <div className="flex items-center gap-8">
-            {teamInfo && (
-              <img 
-                src={`https://cdn.nba.com/logos/nba/${teamId}/global/L/logo.svg`} 
-                className="w-20 h-20 object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.1)]" 
-                alt="" 
-              />
-            )}
+            <img
+              src={`https://cdn.nba.com/logos/nba/${teamId}/global/L/logo.svg`}
+              className="w-20 h-20 object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.1)]"
+              alt=""
+            />
             <div>
               {loading ? (
                 <div className="h-10 w-48 bg-white/5 animate-pulse rounded-lg" />
               ) : (
                 <>
-                  <p className="text-[10px] font-black uppercase text-red-600 tracking-[0.6em] mb-2">Team Roster</p>
+                  <p className="text-[10px] font-black uppercase text-red-600 tracking-[0.6em] mb-1">
+                    {teamInfo?.conference} · {teamInfo?.division}
+                  </p>
                   <h2 className="text-4xl font-black italic tracking-tighter uppercase leading-none">
                     {teamInfo?.city} <span className="text-white/20">{teamInfo?.name}</span>
                   </h2>
+                  {teamDetails && (
+                    <p className="text-[10px] text-white/30 font-bold uppercase tracking-widest mt-1">
+                      Est. {teamDetails.yearFounded} · {teamDetails.arena}
+                    </p>
+                  )}
                 </>
               )}
             </div>
@@ -457,46 +470,98 @@ const TeamRosterModal = ({ teamId, onClose }: { teamId: number, onClose: () => v
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-10 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-10 custom-scrollbar space-y-10">
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[...Array(12)].map((_, i) => (
-                <div key={i} className="h-32 bg-white/5 rounded-3xl animate-pulse" />
-              ))}
+              {[...Array(12)].map((_, i) => <div key={i} className="h-32 bg-white/5 rounded-3xl animate-pulse" />)}
             </div>
           ) : (
-            <div className="space-y-12">
-               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <>
+              {/* Info Cards */}
+              {teamDetails && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {[
+                    { label: 'Arena', value: teamDetails.arena },
+                    { label: 'Capacidade', value: teamDetails.arenaCapacity ? Number(teamDetails.arenaCapacity).toLocaleString('pt-BR') : '—' },
+                    { label: 'Head Coach', value: teamDetails.headCoach || '—' },
+                    { label: 'Títulos NBA', value: teamDetails.championships > 0 ? `🏆 ${teamDetails.championships}x` : '—' },
+                  ].map(item => (
+                    <div key={item.label} className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col gap-1">
+                      <span className="text-[9px] font-black uppercase tracking-[0.3em] text-white/30">{item.label}</span>
+                      <span className="text-sm font-black uppercase tracking-tight text-white leading-tight">{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Retired Numbers */}
+              {teamDetails?.retiredNumbers?.length > 0 && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <div className="h-px flex-1 bg-white/10" />
+                    <span className="text-[9px] font-black uppercase tracking-[0.4em] text-white/30">Números Aposentados</span>
+                    <div className="h-px flex-1 bg-white/10" />
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    {teamDetails.retiredNumbers.map((r: any, i: number) => (
+                      <div key={i} className="flex flex-col items-center gap-1 bg-white/5 border border-white/10 rounded-2xl px-4 py-3 min-w-[80px]">
+                        <span className="text-2xl font-black italic text-white">#{r.jersey}</span>
+                        <span className="text-[9px] font-bold uppercase tracking-wide text-white/40 text-center leading-tight">{r.player}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Roster */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <div className="h-px flex-1 bg-white/10" />
+                  <span className="text-[9px] font-black uppercase tracking-[0.4em] text-white/30">Elenco 2025-26</span>
+                  <div className="h-px flex-1 bg-white/10" />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {roster.map(player => (
-                    <div key={player.id} className="group bg-white/5 border border-white/10 rounded-[2.5rem] p-6 hover:bg-white/10 hover:border-white/20 transition-all flex items-center gap-6">
-                      <div className="relative">
-                        <div className="w-20 h-20 bg-black/40 rounded-full border border-white/10 overflow-hidden group-hover:scale-105 transition-transform">
-                           <img 
+                    <div key={player.id} className="group bg-white/5 border border-white/10 rounded-[2rem] p-5 hover:bg-white/10 hover:border-white/20 transition-all flex items-center gap-5">
+                      <div className="relative flex-shrink-0">
+                        <div className="w-16 h-16 bg-black/40 rounded-full border border-white/10 overflow-hidden group-hover:scale-105 transition-transform">
+                          <img
                             src={`https://ak-static.cms.nba.com/wp-content/uploads/headshots/nba/latest/260x190/${player.id}.png`}
                             onError={(e) => { e.currentTarget.src = 'https://cdn.nba.com/manage/2021/08/default-headshot.png'; }}
-                            className="w-full h-full object-cover translate-y-2 scale-110"
+                            className="w-full h-full object-cover translate-y-1 scale-110"
                             alt={player.name}
                           />
                         </div>
-                        <div className="absolute -top-1 -right-1 w-8 h-8 bg-red-600 rounded-full border-2 border-[#08080a] flex items-center justify-center font-black text-[10px] italic">
-                          #{player.num}
+                        {/* FIX: exibe o número real do jogador */}
+                        <div className="absolute -top-1 -right-1 w-7 h-7 bg-red-600 rounded-full border-2 border-[#08080a] flex items-center justify-center font-black text-[9px] italic">
+                          {player.num !== '' && player.num != null ? player.num : '—'}
                         </div>
                       </div>
-                      <div className="flex-1">
-                        <h4 className="font-black uppercase tracking-tight text-white mb-1 leading-tight">{player.name}</h4>
-                        <div className="flex gap-2 flex-wrap">
-                          <span className="text-[9px] font-black uppercase tracking-widest text-white/30 px-2 py-0.5 bg-white/5 rounded-md border border-white/5">
-                            {player.pos}
-                          </span>
-                          <span className="text-[9px] font-black uppercase tracking-widest text-white/30 px-2 py-0.5 bg-white/5 rounded-md border border-white/5">
-                            {player.height}
-                          </span>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-black uppercase tracking-tight text-white mb-1 leading-tight text-sm truncate">{player.name}</h4>
+                        <div className="flex gap-1.5 flex-wrap">
+                          {player.pos && (
+                            <span className="text-[9px] font-black uppercase tracking-widest text-white/30 px-2 py-0.5 bg-white/5 rounded-md border border-white/5">
+                              {player.pos}
+                            </span>
+                          )}
+                          {player.height && (
+                            <span className="text-[9px] font-black uppercase tracking-widest text-white/30 px-2 py-0.5 bg-white/5 rounded-md border border-white/5">
+                              {player.height}
+                            </span>
+                          )}
+                          {player.exp && (
+                            <span className="text-[9px] font-black uppercase tracking-widest text-white/30 px-2 py-0.5 bg-white/5 rounded-md border border-white/5">
+                              {player.exp === 'R' ? 'Rookiei' : `${player.exp}a`}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
                   ))}
-               </div>
-            </div>
+                </div>
+              </div>
+            </>
           )}
         </div>
       </motion.div>
@@ -592,14 +657,14 @@ const getLocalDateStr = () => {
 };
 
 const PlayoffsView = () => {
-  const [data, setData] = useState<any>(null);
+  const [data, setData]       = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError]     = useState(false);
 
   useEffect(() => {
     fetch('/api/playoffs')
       .then(res => res.json())
-      .then(d => { setData(d); setLoading(false); })
+      .then(d  => { setData(d);    setLoading(false); })
       .catch(() => { setError(true); setLoading(false); });
   }, []);
 
@@ -608,156 +673,162 @@ const PlayoffsView = () => {
       Carregando Playoffs...
     </div>
   );
-
   if (error || !data?.series?.length) return (
     <div className="flex flex-col items-center justify-center py-32 text-center opacity-40">
       <Trophy className="w-12 h-12 mb-6" />
       <h3 className="font-black uppercase tracking-tighter text-xl">Dados indisponíveis</h3>
-      <p className="text-xs max-w-xs mt-2 font-bold uppercase tracking-widest text-white/50 leading-loose">
-        O chaveamento dos playoffs não está disponível no momento.
-      </p>
     </div>
   );
 
-  const { series, teamsCount } = data;
+  const { series } = data;
 
-  const roundName =
-    teamsCount <= 2 ? '🏆 NBA Finals' :
-    teamsCount <= 4 ? 'Conference Finals' :
-    teamsCount <= 8 ? 'Conference Semifinals' :
-    'First Round';
+  // Usa roundNum do Game ID — 100% confiável
+  const by = (conf: string, round: number) =>
+    series
+      .filter((s: any) => s.conference === conf && s.roundNum === round)
+      .sort((a: any, b: any) => (a.seriesNum ?? '').localeCompare(b.seriesNum ?? ''));
 
-  const eastSeries = series.filter((s: any) => s.conference === 'East');
-  const westSeries = series.filter((s: any) => s.conference === 'West');
-  const finalsSeries = series.filter((s: any) => s.conference === 'Finals');
+  const westR1    = by('West', 1);
+  const eastR1    = by('East', 1);
+  const westSemis = by('West', 2);
+  const eastSemis = by('East', 2);
+  const westCF    = by('West', 3);
+  const eastCF    = by('East', 3);
+  const finals    = series.find((s: any) => s.roundNum === 4) ?? null;
 
-  const SeriesCard = ({ s }: { s: any }) => {
-    const topTeam = s.topTeam;
-    const bottomTeam = s.bottomTeam;
-    const topWins = s.topWins ?? 0;
-    const bottomWins = s.bottomWins ?? 0;
-    const isOver = topWins === 4 || bottomWins === 4;
-    const topWon = topWins === 4;
-    const bottomWon = bottomWins === 4;
+  const TeamRow = ({ team, wins, isWinner, isLoser, seed }: {
+    team: any; wins: number; isWinner: boolean; isLoser: boolean; seed?: number;
+  }) => (
+    <div className={`flex items-center gap-2 py-2 px-3 ${isLoser ? 'opacity-30' : ''}`}>
+      <div className="w-7 h-7 flex-shrink-0 flex items-center justify-center">
+        {team
+          ? <img src={`https://cdn.nba.com/logos/nba/${team.teamId}/global/L/logo.svg`} className="w-full h-full object-contain" alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+          : <div className="w-5 h-5 rounded-full bg-white/10" />}
+      </div>
+      <div className="flex-1 min-w-0 flex items-center gap-1">
+        {seed != null && <span className="text-[9px] text-white/30 font-black flex-shrink-0">{seed}</span>}
+        <span className="text-[11px] font-black uppercase tracking-tight text-white truncate">
+          {team ? team.teamName.split(' ').pop() : 'TBD'}
+        </span>
+      </div>
+      <span className={`text-lg font-black italic tabular-nums w-4 text-right ${isWinner ? 'text-white' : 'text-white/40'}`}>
+        {wins}
+      </span>
+    </div>
+  );
 
+  const SeriesBox = ({ s }: { s: any | null }) => {
+    if (!s) return (
+      <div className="bg-white/3 border border-white/5 rounded-xl overflow-hidden">
+        {[0, 1].map(i => (
+          <div key={i}>
+            {i === 1 && <div className="h-px bg-white/5" />}
+            <div className="flex items-center gap-2 py-2 px-3 opacity-20">
+              <div className="w-7 h-7 rounded-full bg-white/10 flex-shrink-0" />
+              <span className="flex-1 text-[11px] font-black uppercase text-white">TBD</span>
+              <span className="text-lg font-black italic text-white/40 w-4 text-right">—</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+    const topWon    = s.topWins    === 4;
+    const bottomWon = s.bottomWins === 4;
     return (
-      <div className="bg-white/5 border border-white/10 rounded-[2rem] p-5 space-y-3 hover:bg-white/[0.08] transition-colors">
-        {/* Top Team */}
-        <div className={`flex items-center gap-3 ${isOver && !topWon ? 'opacity-30' : ''}`}>
-          <div className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center border border-white/10 flex-shrink-0">
-            {topTeam ? (
-              <img
-                src={`https://cdn.nba.com/logos/nba/${topTeam.teamId}/global/L/logo.svg`}
-                className="w-7 h-7 object-contain"
-                alt=""
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
-            ) : <span className="text-white/20 text-[9px] font-black">TBD</span>}
-          </div>
-          <div className="flex-1 min-w-0">
-            <span className="text-xs font-black uppercase tracking-tight block truncate">
-              {topTeam ? `${topTeam.teamCity}` : 'TBD'}
-            </span>
-            {topTeam && (
-              <span className="text-[9px] text-white/30 font-bold uppercase tracking-widest block">
-                #{s.topSeed} Seed
-              </span>
-            )}
-          </div>
-          <span className={`text-2xl font-black italic tabular-nums ${topWon ? 'text-white' : 'text-white/40'}`}>
-            {topWins}
-          </span>
-        </div>
-
-        <div className="h-px bg-white/5" />
-
-        {/* Bottom Team */}
-        <div className={`flex items-center gap-3 ${isOver && !bottomWon ? 'opacity-30' : ''}`}>
-          <div className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center border border-white/10 flex-shrink-0">
-            {bottomTeam ? (
-              <img
-                src={`https://cdn.nba.com/logos/nba/${bottomTeam.teamId}/global/L/logo.svg`}
-                className="w-7 h-7 object-contain"
-                alt=""
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
-            ) : <span className="text-white/20 text-[9px] font-black">TBD</span>}
-          </div>
-          <div className="flex-1 min-w-0">
-            <span className="text-xs font-black uppercase tracking-tight block truncate">
-              {bottomTeam ? `${bottomTeam.teamCity}` : 'TBD'}
-            </span>
-            {bottomTeam && (
-              <span className="text-[9px] text-white/30 font-bold uppercase tracking-widest block">
-                #{s.bottomSeed} Seed
-              </span>
-            )}
-          </div>
-          <span className={`text-2xl font-black italic tabular-nums ${bottomWon ? 'text-white' : 'text-white/40'}`}>
-            {bottomWins}
-          </span>
-        </div>
-
-        {isOver && (
-          <div className="pt-1 flex justify-end">
-            <span className="text-[9px] font-black uppercase tracking-[0.2em] px-2 py-0.5 bg-white/10 rounded-full text-white/40">
-              Eliminado
-            </span>
-          </div>
-        )}
+      <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden hover:border-white/20 transition-colors">
+        <TeamRow team={s.topTeam}    wins={s.topWins}    isWinner={topWon}    isLoser={bottomWon} seed={s.topSeed}    />
+        <div className="h-px bg-white/10" />
+        <TeamRow team={s.bottomTeam} wins={s.bottomWins} isWinner={bottomWon} isLoser={topWon}    seed={s.bottomSeed} />
       </div>
     );
   };
 
+  const ColHeader = ({ label, sub }: { label: string; sub: string }) => (
+    <div className="text-center mb-3">
+      <div className="text-[8px] font-black tracking-[0.3em] uppercase text-white/20">{sub}</div>
+      <div className="text-[10px] font-black tracking-[0.15em] uppercase text-white/60">{label}</div>
+    </div>
+  );
+
+  const COL    = 'flex flex-col gap-3 w-[155px] flex-shrink-0';
+  const COL_SM = 'flex flex-col gap-3 w-[140px] flex-shrink-0';
+
   return (
-    <div className="space-y-16">
-      <div className="text-center space-y-4">
+    <div className="space-y-10">
+      <div className="text-center space-y-3">
         <h3 className="text-6xl font-black italic tracking-tighter uppercase leading-none">
           NBA <span className="text-white/20">Playoffs</span>
         </h3>
         <p className="text-white/40 text-[10px] font-black tracking-[0.5em] uppercase">
-          Season 2025-26 · {roundName}
+          Season 2025-26 · Live Bracket
         </p>
       </div>
 
-      {finalsSeries.length > 0 ? (
-        <div className="max-w-sm mx-auto space-y-6">
-          <div className="flex items-center gap-4">
-            <div className="h-px flex-1 bg-white/10" />
-            <span className="text-[10px] font-black tracking-[0.4em] uppercase text-yellow-500">🏆 NBA Finals</span>
-            <div className="h-px flex-1 bg-white/10" />
-          </div>
-          {finalsSeries.map((s: any, i: number) => <SeriesCard key={i} s={s} />)}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-          {/* East */}
-          {eastSeries.length > 0 && (
-            <div className="space-y-6">
-              <div className="flex items-center gap-4 px-2">
-                <div className="w-3 h-3 rounded-full bg-red-600" />
-                <h4 className="text-[11px] font-black tracking-[0.4em] uppercase text-white/40">Conferência Leste</h4>
-              </div>
-              <div className="space-y-4">
-                {eastSeries.map((s: any, i: number) => <SeriesCard key={i} s={s} />)}
-              </div>
-            </div>
-          )}
+      <div className="overflow-x-auto pb-4">
+        <div className="flex items-start justify-center gap-3 min-w-[960px] px-4">
 
-          {/* West */}
-          {westSeries.length > 0 && (
-            <div className="space-y-6">
-              <div className="flex items-center gap-4 px-2">
-                <div className="w-3 h-3 rounded-full bg-blue-600" />
-                <h4 className="text-[11px] font-black tracking-[0.4em] uppercase text-white/40">Conferência Oeste</h4>
-              </div>
-              <div className="space-y-4">
-                {westSeries.map((s: any, i: number) => <SeriesCard key={i} s={s} />)}
-              </div>
+          <div className={COL}>
+            <ColHeader label="First Round" sub="West" />
+            <div className="flex flex-col gap-4">
+              <SeriesBox s={westR1[0] ?? null} />
+              <SeriesBox s={westR1[1] ?? null} />
+              <SeriesBox s={westR1[2] ?? null} />
+              <SeriesBox s={westR1[3] ?? null} />
             </div>
-          )}
+          </div>
+
+          <div className={COL_SM}>
+            <ColHeader label="Semifinals" sub="West" />
+            <div className="flex flex-col gap-4 mt-[46px]">
+              <SeriesBox s={westSemis[0] ?? null} />
+              <SeriesBox s={westSemis[1] ?? null} />
+            </div>
+          </div>
+
+          <div className={COL_SM}>
+            <ColHeader label="Conf. Finals" sub="West" />
+            <div className="flex flex-col gap-4 mt-[92px]">
+              <SeriesBox s={westCF[0] ?? null} />
+            </div>
+          </div>
+
+          <div className="flex flex-col items-center w-[170px] flex-shrink-0">
+            <ColHeader label="NBA Finals" sub="🏆" />
+            <div className="mt-[140px] w-full space-y-3">
+              <div className="flex justify-center">
+                <img src="https://cdn.nba.com/logos/leagues/logo-nba.svg" className="w-14 h-14 object-contain opacity-50" alt="NBA" />
+              </div>
+              <SeriesBox s={finals} />
+            </div>
+          </div>
+
+          <div className={COL_SM}>
+            <ColHeader label="Conf. Finals" sub="East" />
+            <div className="flex flex-col gap-4 mt-[92px]">
+              <SeriesBox s={eastCF[0] ?? null} />
+            </div>
+          </div>
+
+          <div className={COL_SM}>
+            <ColHeader label="Semifinals" sub="East" />
+            <div className="flex flex-col gap-4 mt-[46px]">
+              <SeriesBox s={eastSemis[0] ?? null} />
+              <SeriesBox s={eastSemis[1] ?? null} />
+            </div>
+          </div>
+
+          <div className={COL}>
+            <ColHeader label="First Round" sub="East" />
+            <div className="flex flex-col gap-4">
+              <SeriesBox s={eastR1[0] ?? null} />
+              <SeriesBox s={eastR1[1] ?? null} />
+              <SeriesBox s={eastR1[2] ?? null} />
+              <SeriesBox s={eastR1[3] ?? null} />
+            </div>
+          </div>
+
         </div>
-      )}
+      </div>
     </div>
   );
 };
