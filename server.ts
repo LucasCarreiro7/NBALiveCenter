@@ -273,113 +273,191 @@ async function startServer() {
   });
 
   app.get('/api/team/:teamId/roster', async (req, res) => {
-    const { teamId } = req.params;
-    try {
-      const url = `https://stats.nba.com/stats/commonteamroster?LeagueID=00&Season=2025-26&TeamID=${teamId}`;
-      const response = await fetch(url, {
-        headers: {
-          'Host': 'stats.nba.com',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:72.0) Gecko/20100101 Firefox/72.0',
-          'Accept': 'application/json, text/plain, */*',
-          'x-nba-stats-origin': 'stats',
-          'x-nba-stats-token': 'true',
-          'Referer': 'https://stats.nba.com/',
-        }
-      });
-      const data = await response.json();
-      res.json(data);
-    } catch (error) {
-      console.error('Error fetching roster:', error);
-      res.status(500).json({ error: 'Failed to fetch roster' });
+  const { teamId } = req.params;
+  const nbaHeaders = {
+    'Host': 'stats.nba.com',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:72.0) Gecko/20100101 Firefox/72.0',
+    'Accept': 'application/json, text/plain, */*',
+    'x-nba-stats-origin': 'stats',
+    'x-nba-stats-token': 'true',
+    'Referer': 'https://stats.nba.com/',
+  };
+
+  try {
+    // Busca roster e detalhes do time em paralelo
+    const [rosterRes, detailsRes] = await Promise.all([
+      fetch(`https://stats.nba.com/stats/commonteamroster?LeagueID=00&Season=2025-26&TeamID=${teamId}`, { headers: nbaHeaders }),
+      fetch(`https://stats.nba.com/stats/teamdetails?TeamID=${teamId}`, { headers: nbaHeaders }),
+    ]);
+
+    const rosterData = await rosterRes.json();
+    const detailsData = await detailsRes.json();
+
+    // Extrai detalhes do time (arena, coach, etc.)
+    const bgRS = detailsData.resultSets?.find((rs: any) => rs.name === 'TeamBackground');
+    const champsRS = detailsData.resultSets?.find((rs: any) => rs.name === 'TeamAwardsChampionships');
+    const retiredRS = detailsData.resultSets?.find((rs: any) => rs.name === 'TeamRetired');
+
+    let teamDetails = null;
+    if (bgRS && bgRS.rowSet.length > 0) {
+      const h = (key: string) => bgRS.rowSet[0][bgRS.headers.indexOf(key)];
+      teamDetails = {
+        arena: h('ARENA'),
+        arenaCapacity: h('ARENACAPACITY'),
+        yearFounded: h('YEARFOUNDED'),
+        headCoach: h('HEADCOACH'),
+        generalManager: h('GENERALMANAGER'),
+        owner: h('OWNER'),
+        championships: champsRS?.rowSet?.length ?? 0,
+        retiredNumbers: retiredRS?.rowSet?.map((row: any) => ({
+          player: row[retiredRS.headers.indexOf('PLAYER')],
+          jersey: row[retiredRS.headers.indexOf('JERSEY')],
+          seasons: row[retiredRS.headers.indexOf('SEASONSWITHTEAM')],
+        })) ?? [],
+      };
     }
+
+    res.json({ ...rosterData, teamDetails });
+  } catch (error) {
+    console.error('Error fetching roster:', error);
+    res.status(500).json({ error: 'Failed to fetch roster' });
+  }
   });
 
   app.get('/api/playoffs', async (req, res) => {
+  const nbaHeaders = {
+    'Host': 'stats.nba.com',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:72.0) Gecko/20100101 Firefox/72.0',
+    'Accept': 'application/json, text/plain, */*',
+    'x-nba-stats-origin': 'stats',
+    'x-nba-stats-token': 'true',
+    'Referer': 'https://stats.nba.com/',
+  };
+
   try {
-    // Usa o seriesStandings dos playoffs — endpoint confiável da NBA
-    const url = 'https://stats.nba.com/stats/leaguestandingsv3?LeagueID=00&Season=2025-26&SeasonType=Playoffs';
-    const response = await fetch(url, {
-      headers: {
-        'Host': 'stats.nba.com',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:72.0) Gecko/20100101 Firefox/72.0',
-        'Accept': 'application/json, text/plain, */*',
-        'x-nba-stats-origin': 'stats',
-        'x-nba-stats-token': 'true',
-        'Referer': 'https://stats.nba.com/',
+    // Busca jogos e standings em paralelo
+    const [gamesRes, standingsRes] = await Promise.all([
+      fetch('https://stats.nba.com/stats/leaguegamefinder?LeagueID=00&Season=2025-26&SeasonType=Playoffs&PlayerOrTeam=T', { headers: nbaHeaders }),
+      fetch('https://stats.nba.com/stats/leaguestandingsv3?LeagueID=00&Season=2025-26&SeasonType=Regular+Season', { headers: nbaHeaders }),
+    ]);
+
+    const gamesData: any   = await gamesRes.json();
+    const standingsData: any = await standingsRes.json();
+
+    const gamesRS    = gamesData.resultSets?.find((rs: any) => rs.name === 'LeagueGameFinderResults');
+    const standingsRS = standingsData.resultSets?.find((rs: any) => rs.name === 'Standings');
+
+    if (!gamesRS || gamesRS.rowSet.length === 0) {
+      return res.status(404).json({ error: 'No playoff games found' });
+    }
+
+    // Monta mapa de conferência e seed por TEAM_ID (mais confiável que abreviação)
+    const teamConferenceById: Record<number, string> = {};
+    const teamSeedById: Record<number, number>       = {};
+    const teamAbbrById: Record<number, string>       = {};
+
+    if (standingsRS) {
+      const sh = standingsRS.headers;
+      // Log dos primeiros headers para ver os nomes reais
+      console.log('STANDINGS HEADERS:', sh.slice(0, 10));
+      for (const row of standingsRS.rowSet) {
+        const teamId = row[sh.indexOf('TeamID')];
+        const abbr   = row[sh.indexOf('TeamAbbreviation')];
+        const conf   = row[sh.indexOf('Conference')];
+        const seed   = row[sh.indexOf('PlayoffRank')];
+        if (teamId) {
+          teamConferenceById[teamId] = conf;
+          teamSeedById[teamId]       = seed;
+          teamAbbrById[teamId]       = abbr;
+        }
       }
-    });
-
-    if (!response.ok) throw new Error('standings failed');
-    const data: any = await response.json();
-    const standingsRS = data.resultSets?.find((rs: any) => rs.name === 'Standings');
-    if (!standingsRS || standingsRS.rowSet.length === 0) {
-      return res.status(404).json({ error: 'No playoff data' });
     }
 
-    const headers = standingsRS.headers;
-    const teams = standingsRS.rowSet.map((row: any) => {
-      const h = (key: string) => row[headers.indexOf(key)];
-      return {
-        teamId: h('TeamID'),
-        teamName: h('TeamName'),
-        teamCity: h('TeamCity'),
-        abbreviation: h('TeamAbbreviation'),
-        conference: h('Conference'),
-        wins: h('WINS'),
-        losses: h('LOSSES'),
-        rank: h('PlayoffRank'),
-        clinchIndicator: h('ClinchIndicator') ?? '',
-      };
-    });
+    console.log('Sample standings entry:', JSON.stringify(
+      Object.entries(teamConferenceById).slice(0, 3).map(([id, conf]) => ({ id, conf, seed: teamSeedById[Number(id)] }))
+    ));
 
-    // Monta as séries emparelhando seeds por conferência
-    const buildSeries = (conf: string, seedA: number, seedB: number) => {
-      const teamA = teams.find((t: any) => t.conference === conf && t.rank === seedA);
-      const teamB = teams.find((t: any) => t.conference === conf && t.rank === seedB);
-      if (!teamA && !teamB) return null;
-      return {
-        conference: conf,
-        topSeed: seedA,
-        bottomSeed: seedB,
-        topTeam: teamA || null,
-        bottomTeam: teamB || null,
-        topWins: teamA?.wins ?? 0,
-        bottomWins: teamB?.wins ?? 0,
-      };
-    };
+    // Processa jogos — agrupa por par canônico de times
+    const h   = gamesRS.headers;
+    const idx = (key: string) => h.indexOf(key);
 
-    // Determina rodada pelo número de times restantes
-    const remaining = teams.length;
-    let series: any[] = [];
+    const canonicalMap: Record<string, any> = {};
 
-    if (remaining <= 2) {
-      // Finals
-      const east = teams.find((t: any) => t.conference === 'East');
-      const west = teams.find((t: any) => t.conference === 'West');
-      series = [{ conference: 'Finals', topTeam: east || null, bottomTeam: west || null, topWins: east?.wins ?? 0, bottomWins: west?.wins ?? 0 }];
-    } else if (remaining <= 4) {
-      // Conf Finals
-      series = [
-        buildSeries('East', 1, 2),
-        buildSeries('West', 1, 2),
-      ].filter(Boolean);
-    } else if (remaining <= 8) {
-      // Semifinals
-      series = [
-        buildSeries('East', 1, 4), buildSeries('East', 2, 3),
-        buildSeries('West', 1, 4), buildSeries('West', 2, 3),
-      ].filter(Boolean);
-    } else {
-      // First Round
-      series = [
-        buildSeries('East', 1, 8), buildSeries('East', 4, 5),
-        buildSeries('East', 3, 6), buildSeries('East', 2, 7),
-        buildSeries('West', 1, 8), buildSeries('West', 4, 5),
-        buildSeries('West', 3, 6), buildSeries('West', 2, 7),
-      ].filter(Boolean);
+    for (const row of gamesRS.rowSet) {
+      const teamId   = row[idx('TEAM_ID')];
+      const teamName = row[idx('TEAM_NAME')] ?? '';
+      const abbr     = row[idx('TEAM_ABBREVIATION')] ?? '';
+      const matchup  = row[idx('MATCHUP')] ?? '';
+      const wl       = row[idx('WL')] ?? '';
+      const gameDate = row[idx('GAME_DATE')] ?? '';
+      const gameId   = String(row[idx('GAME_ID')] ?? '');
+
+      // Extrai roundNum da posição 7 do GAME_ID
+      const roundNum = parseInt(gameId.charAt(7)) || 1;
+
+      const oppAbbr = matchup.includes(' vs. ')
+        ? matchup.split(' vs. ')[1]?.trim()
+        : matchup.split(' @ ')[1]?.trim();
+
+      if (!oppAbbr || !abbr) continue;
+
+      const abbrs    = [abbr, oppAbbr].sort();
+      const canonKey = `${roundNum}_${abbrs[0]}_${abbrs[1]}`;
+
+      if (!canonicalMap[canonKey]) {
+        canonicalMap[canonKey] = {
+          roundNum,
+          latestDate: gameDate,
+          teams: {}
+        };
+      }
+      if (gameDate > canonicalMap[canonKey].latestDate) {
+        canonicalMap[canonKey].latestDate = gameDate;
+      }
+      if (!canonicalMap[canonKey].teams[teamId]) {
+        canonicalMap[canonKey].teams[teamId] = { teamId, teamName, abbreviation: abbr, wins: 0, losses: 0 };
+      }
+      if (wl === 'W') canonicalMap[canonKey].teams[teamId].wins++;
+      else            canonicalMap[canonKey].teams[teamId].losses++;
     }
 
-    res.json({ series, teamsCount: remaining });
+    const series = Object.values(canonicalMap).map((s: any) => {
+      const teams = Object.values(s.teams) as any[];
+      if (teams.length < 2) return null;
+
+      teams.sort((a: any, b: any) => b.wins - a.wins);
+      const [topTeam, bottomTeam] = teams;
+
+      // Usa teamId para buscar conferência — mais confiável
+      const topConf  = teamConferenceById[topTeam.teamId];
+      const botConf  = teamConferenceById[bottomTeam.teamId];
+
+      let conference: string;
+      if (s.roundNum === 4)                          conference = 'Finals';
+      else if (topConf && topConf === botConf)       conference = topConf;
+      else if (topConf && !botConf)                  conference = topConf;
+      else if (botConf && !topConf)                  conference = botConf;
+      else                                           conference = 'Finals';
+
+      return {
+        conference,
+        roundNum:   s.roundNum,
+        topSeed:    teamSeedById[topTeam.teamId]    ?? null,
+        bottomSeed: teamSeedById[bottomTeam.teamId] ?? null,
+        topWins:    topTeam.wins,
+        bottomWins: bottomTeam.wins,
+        isOver:     topTeam.wins === 4 || bottomTeam.wins === 4,
+        latestDate: s.latestDate,
+        topTeam:    { teamId: topTeam.teamId,    teamName: topTeam.teamName,    abbreviation: topTeam.abbreviation },
+        bottomTeam: { teamId: bottomTeam.teamId, teamName: bottomTeam.teamName, abbreviation: bottomTeam.abbreviation },
+      };
+    }).filter(Boolean);
+
+    console.log('FINAL SERIES:', series.map((s: any) =>
+      `${s.conference} R${s.roundNum}: ${s.topTeam.abbreviation}(${s.topSeed}) ${s.topWins}-${s.bottomWins} ${s.bottomTeam.abbreviation}(${s.bottomSeed})`
+    ));
+
+    res.json({ series });
   } catch (error) {
     console.error('Error fetching playoffs:', error);
     res.status(500).json({ error: 'Failed to fetch playoffs' });
