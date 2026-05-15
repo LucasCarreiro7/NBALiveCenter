@@ -188,7 +188,7 @@ const StandingsView = () => {
       .catch(err => console.error(err));
   }, []);
 
-  if (loading) return <div className="py-20 text-center animate-pulse text-white/20 uppercase font-black tracking-widest">Carregando Classificação...</div>;
+  if (loading) return <div className="py-20 text-center animate-pulse text-white/20 uppercase font-black tracking-widest">Loading standings...</div>;
 
   const conferences = ['East', 'West'];
 
@@ -197,17 +197,17 @@ const StandingsView = () => {
       {conferences.map(conf => (
         <div key={conf} className="bg-white/5 border border-white/10 rounded-[2.5rem] overflow-hidden">
           <div className="px-8 py-6 border-b border-white/10 bg-white/5">
-            <h3 className="font-black italic tracking-tighter uppercase text-2xl">Conferência {conf === 'East' ? 'Leste' : 'Oeste'}</h3>
+            <h3 className="font-black italic tracking-tighter uppercase text-2xl"> {conf === 'East' ? 'East Conference' : 'West Conference'}</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="text-[10px] uppercase font-black tracking-[0.3em] text-white/30 border-b border-white/5">
                   <th className="px-8 py-5">#</th>
-                  <th className="px-4 py-5">Time</th>
-                  <th className="px-4 py-5 text-center">V-D</th>
+                  <th className="px-4 py-5">Team</th>
+                  <th className="px-4 py-5 text-center">W-L</th>
                   <th className="px-4 py-5 text-center">%</th>
-                  <th className="px-8 py-5 text-right">ULT10</th>
+                  <th className="px-8 py-5 text-right">L10</th>
                 </tr>
               </thead>
               <tbody className="text-sm font-bold">
@@ -482,9 +482,9 @@ const TeamRosterModal = ({ teamId, onClose }: { teamId: number, onClose: () => v
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {[
                     { label: 'Arena', value: teamDetails.arena },
-                    { label: 'Capacidade', value: teamDetails.arenaCapacity ? Number(teamDetails.arenaCapacity).toLocaleString('pt-BR') : '—' },
+                    { label: 'Capacity', value: teamDetails.arenaCapacity ? Number(teamDetails.arenaCapacity).toLocaleString('pt-BR') : '—' },
                     { label: 'Head Coach', value: teamDetails.headCoach || '—' },
-                    { label: 'Títulos NBA', value: teamDetails.championships > 0 ? `🏆 ${teamDetails.championships}x` : '—' },
+                    { label: 'NBA Titles', value: teamDetails.championships > 0 ? `🏆 ${teamDetails.championships}x` : '—' },
                   ].map(item => (
                     <div key={item.label} className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col gap-1">
                       <span className="text-[9px] font-black uppercase tracking-[0.3em] text-white/30">{item.label}</span>
@@ -499,7 +499,7 @@ const TeamRosterModal = ({ teamId, onClose }: { teamId: number, onClose: () => v
                 <div className="space-y-4">
                   <div className="flex items-center gap-4">
                     <div className="h-px flex-1 bg-white/10" />
-                    <span className="text-[9px] font-black uppercase tracking-[0.4em] text-white/30">Números Aposentados</span>
+                    <span className="text-[9px] font-black uppercase tracking-[0.4em] text-white/30">Retired Numbers</span>
                     <div className="h-px flex-1 bg-white/10" />
                   </div>
                   <div className="flex flex-wrap gap-3">
@@ -517,7 +517,7 @@ const TeamRosterModal = ({ teamId, onClose }: { teamId: number, onClose: () => v
               <div className="space-y-4">
                 <div className="flex items-center gap-4">
                   <div className="h-px flex-1 bg-white/10" />
-                  <span className="text-[9px] font-black uppercase tracking-[0.4em] text-white/30">Elenco 2025-26</span>
+                  <span className="text-[9px] font-black uppercase tracking-[0.4em] text-white/30">2025-26 Roster</span>
                   <div className="h-px flex-1 bg-white/10" />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -587,7 +587,7 @@ const TeamsView = () => {
       });
   }, []);
 
-  if (loading) return <div className="py-20 text-center animate-pulse text-white/20 uppercase font-black tracking-widest">Sincronizando Franquias...</div>;
+  if (loading) return <div className="py-20 text-center animate-pulse text-white/20 uppercase font-black tracking-widest">Synchronizing Franchises...</div>;
 
   const conferences = ['East', 'West'];
 
@@ -603,7 +603,7 @@ const TeamsView = () => {
           <div key={conf} className="space-y-8">
             <div className="flex items-center gap-4 px-6">
               <div className={`w-3 h-3 rounded-full ${conf === 'East' ? 'bg-red-600' : 'bg-blue-600'}`} />
-              <h4 className="text-[12px] font-black tracking-[0.4em] uppercase text-white/40">Conferência {conf === 'East' ? 'Leste' : 'Oeste'}</h4>
+              <h4 className="text-[12px] font-black tracking-[0.4em] uppercase text-white/40"> {conf === 'East' ? 'East Conference' : 'West Conference'}</h4>
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -670,7 +670,7 @@ const PlayoffsView = () => {
 
   if (loading) return (
     <div className="py-20 text-center animate-pulse text-white/20 uppercase font-black tracking-widest">
-      Carregando Playoffs...
+      Loading Playoffs...
     </div>
   );
   if (error || !data?.series?.length) return (
@@ -985,7 +985,7 @@ export default function App() {
                     <span className="text-[10px] font-black tracking-[0.5em] text-red-500 uppercase">Arena Live</span>
                   </div>
                   <h2 className="text-6xl font-black italic tracking-tighter text-white uppercase leading-[0.8] drop-shadow-2xl">
-                    {isToday ? 'Scheduled Games' : 'Historical Data'}
+                    {isToday ? 'Scheduled Games' : date > getLocalDateStr() ? 'Scheduled Games' : 'Historical Data'}
                   </h2>
                   <p className="text-white/40 text-sm font-medium mt-4 tracking-wide max-w-xl">
                     Real-time score updates and detailed statistics from across the league. Currently viewing matches for <span className="text-white">{formatDateLabel(date)}</span>.
@@ -995,9 +995,13 @@ export default function App() {
                 <div className="flex items-center gap-3">
                   <div className="px-5 py-2 bg-red-600/10 border border-red-500/30 rounded-full flex items-center gap-2.5">
                     <div className={`w-2 h-2 bg-red-500 rounded-full ${isToday ? 'animate-pulse' : 'opacity-20'}`}></div>
-                    <span className="text-[10px] font-black tracking-widest text-white uppercase">
-                      {isToday ? `${games.filter(g => !g.status.toLowerCase().includes('final')).length} Matches Live` : 'No Live Events'}
-                    </span>
+                      <span className="text-[10px] font-black tracking-widest text-white uppercase">
+                        {isToday
+                          ? `${games.filter(g => !g.status.toLowerCase().includes('final')).length} Matches Live`
+                          : date > getLocalDateStr()
+                          ? 'Upcoming Games'
+                          : 'No Live Events'}
+                      </span>
                   </div>
                 </div>
               </div>
@@ -1028,7 +1032,7 @@ export default function App() {
                   <Clock className="w-12 h-12 text-white/10 mb-6" />
                   <h3 className="text-white/40 font-black text-xl uppercase tracking-tighter">Dark Night</h3>
                   <p className="text-white/20 text-[11px] font-bold uppercase tracking-widest max-w-sm mt-3">
-                    No battles scheduled for the selected temporal coordinates.
+                    No games scheduled for the selected temporal coordinates.
                   </p>
                 </div>
               ) : (
