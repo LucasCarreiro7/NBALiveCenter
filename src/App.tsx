@@ -595,7 +595,7 @@ const TeamsView = () => {
     <div className="space-y-16">
       <div className="text-center space-y-4">
         <h3 className="text-6xl font-black italic tracking-tighter uppercase leading-none">NBA <span className="text-white/20">Franchises</span></h3>
-        <p className="text-white/40 text-[10px] font-black tracking-[0.5em] uppercase">Season 2025-26 Live Database</p>
+        <p className="text-white/40 text-[10px] font-black tracking-[0.5em] uppercase">2025-26 Season Live Database</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
